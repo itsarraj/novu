@@ -1,14 +1,28 @@
-# Full stack: dependency containers + API, Worker, WS + Dashboard (built from this repo).
+# Full stack: dependency containers + API, Worker, WebSocket + Dashboard (images built from this repo).
 #
-# Requires Docker Compose v2.20+ (for `include`) and BuildKit (build secrets for api/worker/ws).
+# Prerequisites: Docker Compose v2.20+ (`include`), BuildKit (build secrets for api/worker/ws).
 #
-# From the novu/ directory:
-#   cp .env.docker.example .env.docker
-#   # set JWT_SECRET, STORE_ENCRYPTION_KEY (32 chars), and VITE_* if not using localhost
-#   pnpm install && pnpm docker:prepare
-#   docker compose -f docker-compose.full.yml --env-file .env.deps up -d --build
+# --- On the VPS (from the `novu/` directory) ---
 #
-# URLs: API :3000  WS :3002  Dashboard :4201
+# 1) Copy env templates and set secrets (JWT_SECRET, STORE_ENCRYPTION_KEY = exactly 32 chars):
+#      cp .env.deps.example .env.deps
+#      cp .env.docker.example .env.docker
+#
+# 2) For a public host (replace with your domain or IP — browser must reach these URLs):
+#      In `.env.docker` set at least:
+#        API_ROOT_URL, FRONT_BASE_URL, DASHBOARD_URL
+#        VITE_API_HOSTNAME, VITE_WEBSOCKET_HOSTNAME, VITE_DASHBOARD_URL
+#
+# 3) Install JS deps and prepare Docker build contexts (Dockerfiles expect `.docker/build/*`):
+#      pnpm install
+#      pnpm docker:prepare
+#
+# 4) Build and start everything (pass both env files so Compose can substitute ${VITE_*} / ${API_*}):
+#      docker compose -f docker-compose.full.yml --env-file .env.deps --env-file .env.docker up -d --build
+#
+# Default published ports: API :3000  Worker (internal health) :3004  WS :3002  Dashboard :4201
+#
+# Optional: NX_NO_CLOUD=true pnpm build  is only needed if you develop apps on the host; this file builds images in Docker.
 
 name: novu
 
@@ -18,6 +32,18 @@ include:
 secrets:
   BULL_MQ_PRO_NPM_TOKEN:
     file: ./scripts/docker/empty-secret
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
+x-node-health: &node-http-health
+  interval: 15s
+  timeout: 10s
+  retries: 10
+  start_period: 90s
 
 services:
   api:
@@ -30,6 +56,7 @@ services:
         - BULL_MQ_PRO_NPM_TOKEN
     image: novu-api:local
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - .env.docker
     environment:
@@ -39,10 +66,23 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - mongo
-      - redis
-      - localstack
-      - clickhouse
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3000/v1/health-check',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      <<: *node-http-health
 
   worker:
     build:
@@ -54,20 +94,34 @@ services:
         - BULL_MQ_PRO_NPM_TOKEN
     image: novu-worker:local
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - .env.docker
     environment:
       NODE_ENV: production
       NOVU_ENTERPRISE: "false"
       PORT: "3004"
-      # In-container calls to the API (see docker/community/docker-compose.yml)
       API_ROOT_URL: http://api:3000
     depends_on:
-      - mongo
-      - redis
-      - localstack
-      - clickhouse
-      - api
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3004/v1/health-check',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      <<: *node-http-health
 
   ws:
     build:
@@ -79,6 +133,7 @@ services:
         - BULL_MQ_PRO_NPM_TOKEN
     image: novu-ws:local
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - .env.docker
     environment:
@@ -88,23 +143,44 @@ services:
     ports:
       - "3002:3002"
     depends_on:
-      - mongo
-      - redis
-      - api
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://127.0.0.1:3002/v1/health-check',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
+      <<: *node-http-health
 
   dashboard:
     build:
       context: .
       dockerfile: apps/dashboard/dockerfile
+      args:
+        VITE_API_HOSTNAME: ${VITE_API_HOSTNAME:-http://localhost:3000}
+        VITE_WEBSOCKET_HOSTNAME: ${VITE_WEBSOCKET_HOSTNAME:-http://localhost:3002}
+        VITE_DASHBOARD_URL: ${VITE_DASHBOARD_URL:-http://localhost:4201}
+        VITE_SELF_HOSTED: "true"
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - .env.docker
     environment:
+      # Runtime: entrypoint injects all `VITE_*` from the container env into `index.html` as `window._env_`
       VITE_API_HOSTNAME: ${VITE_API_HOSTNAME:-http://localhost:3000}
       VITE_WEBSOCKET_HOSTNAME: ${VITE_WEBSOCKET_HOSTNAME:-http://localhost:3002}
+      VITE_DASHBOARD_URL: ${VITE_DASHBOARD_URL:-http://localhost:4201}
       VITE_SELF_HOSTED: "true"
+      VITE_NOVU_ENTERPRISE: "false"
     ports:
       - "4201:4000"
     depends_on:
-      - api
-      - worker
+      api:
+        condition: service_healthy
