@@ -14,6 +14,9 @@
  *
  */
 
+type Buffer = any;
+declare const Buffer: any;
+
 export interface IResponseError {
   error: string;
   message: string;
@@ -161,6 +164,7 @@ export enum SmsProviderIdEnum {
   IMedia = 'imedia',
   Sinch = 'sinch',
   ISendProSms = 'isendpro-sms',
+  GupshupWhatsapp = 'gupshup-whatsapp',
 }
 
 export enum ChatProviderIdEnum {

@@ -53,4 +53,6 @@ export interface ICredentials {
   AppIOOriginalSignature?: string;
   servicePlanId?: string;
   tenantId?: string;
+  /** Gupshup WhatsApp default template id (integration credential) */
+  templateId?: string;
 }

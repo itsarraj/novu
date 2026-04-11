@@ -804,6 +804,33 @@ export const gupshupConfig: IConfigCredential[] = [
   },
 ];
 
+export const gupshupWhatsappConfig: IConfigCredential[] = [
+  {
+    key: CredentialsKeyEnum.ApiKey,
+    displayName: 'API Key',
+    type: 'string',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.From,
+    displayName: 'Source Phone Number',
+    type: 'string',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.SenderName,
+    displayName: 'App Name',
+    type: 'string',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.TemplateId,
+    displayName: 'Default template ID',
+    type: 'string',
+    required: false,
+  },
+];
+
 export const firetextConfig: IConfigCredential[] = [
   {
     key: CredentialsKeyEnum.ApiKey,

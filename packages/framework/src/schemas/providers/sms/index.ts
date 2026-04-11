@@ -18,6 +18,7 @@ export const smsProviderSchemas = {
   'forty-six-elks': genericProviderSchemas,
   'generic-sms': genericProviderSchemas,
   gupshup: genericProviderSchemas,
+  'gupshup-whatsapp': genericProviderSchemas,
   'infobip-sms': genericProviderSchemas,
   'isend-sms': genericProviderSchemas,
   kannel: genericProviderSchemas,

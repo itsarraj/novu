@@ -124,3 +124,9 @@ demos/agent-chat-demo/.next
 demos/agent-chat-demo/.env.local
 demos/agent-chat-demo/tsconfig.tsbuildinfo
 demos/agent-chat-demo/next-env.d.ts
+
+# Docker full-stack image builds (pnpm-context + CI parity)
+.docker/build/
+apps/api/src/dotenvcreate.mjs
+apps/worker/src/dotenvcreate.mjs
+apps/ws/src/dotenvcreate.mjs

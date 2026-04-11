@@ -40,6 +40,7 @@ export function useIntegrationList(searchQuery: string = '') {
         SmsProviderIdEnum.Sms77,
         SmsProviderIdEnum.Infobip,
         SmsProviderIdEnum.Gupshup,
+        SmsProviderIdEnum.GupshupWhatsapp,
       ],
       [ChannelTypeEnum.PUSH]: [
         PushProviderIdEnum.FCM,

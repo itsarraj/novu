@@ -20,10 +20,23 @@ COPY nx.json .
 COPY pnpm-workspace.yaml .
 COPY pnpm-lock.yaml .
 
+# Browser-visible URLs (override via `docker compose build --build-arg` / compose `args`)
+ARG VITE_API_HOSTNAME=http://localhost:3000
+ARG VITE_WEBSOCKET_HOSTNAME=http://localhost:3002
+ARG VITE_DASHBOARD_URL=http://localhost:4201
+ARG VITE_SELF_HOSTED=true
+ENV VITE_API_HOSTNAME=$VITE_API_HOSTNAME
+ENV VITE_WEBSOCKET_HOSTNAME=$VITE_WEBSOCKET_HOSTNAME
+ENV VITE_DASHBOARD_URL=$VITE_DASHBOARD_URL
+ENV VITE_SELF_HOSTED=$VITE_SELF_HOSTED
+
 RUN --mount=type=cache,id=pnpm-store-dashboard,target=/root/.pnpm-store\
   pnpm install --frozen-lockfile --unsafe-perm
 
-RUN CI='' pnpm build:dashboard --skip-nx-cache
+# Build dashboard without Nx to avoid EE task-graph cycles on partial EE checkouts.
+# Run the build steps directly so we can cap Node memory (the `build` script hardcodes 8GB).
+RUN CI='' NODE_OPTIONS='--max-old-space-size=4096' pnpm --filter @novu/dashboard exec tsc -b && \
+    CI='' NODE_OPTIONS='--max-old-space-size=4096' pnpm --filter @novu/dashboard exec vite build
 
 FROM node:22.22.1-alpine3.22
 

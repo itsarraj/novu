@@ -29,7 +29,8 @@ RUN --mount=type=cache,id=pnpm-store-worker,target=/root/.pnpm-store\
  --unsafe-perm\
  --reporter=silent
 
-RUN --mount=type=secret,id=BULL_MQ_PRO_NPM_TOKEN,uid=1000 export BULL_MQ_PRO_NPM_TOKEN=$(cat /run/secrets/BULL_MQ_PRO_NPM_TOKEN) && NODE_ENV=production NX_DAEMON=false pnpm build:worker
+# --parallel=1: default Nx parallel tasks spike RAM; 8GB VPS + full swap OOM-kills the build (exit 130).
+RUN --mount=type=secret,id=BULL_MQ_PRO_NPM_TOKEN,uid=1000 export BULL_MQ_PRO_NPM_TOKEN=$(cat /run/secrets/BULL_MQ_PRO_NPM_TOKEN) && NODE_ENV=production NX_DAEMON=false NX_NO_CLOUD=true pnpm exec nx build @novu/worker --parallel=1
 
 WORKDIR /usr/src/app/apps/worker
 

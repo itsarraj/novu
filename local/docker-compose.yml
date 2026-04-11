@@ -1,0 +1,58 @@
+services:
+  mongo:
+    image: mongo:8.0.17
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-novu-db}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+
+  redis:
+    image: redis:7.4.1-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  # S3 emulation (used by local envs via S3_LOCAL_STACK=http://127.0.0.1:4566)
+  localstack:
+    image: localstack/localstack:3.8.1
+    restart: unless-stopped
+    environment:
+      SERVICES: s3
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack-data:/var/lib/localstack
+
+  # Analytics DB used by API local example env (CLICK_HOUSE_URL=http://127.0.0.1:8123)
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8.14.39-alpine
+    restart: unless-stopped
+    # Without this, the image disables network access for user `default` when no
+    # CLICKHOUSE_PASSWORD is set; apps on the host then get AUTHENTICATION_FAILED.
+    # See: https://hub.docker.com/r/clickhouse/clickhouse-server ("Managing default user")
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+
+volumes:
+  mongodb-data:
+  redis-data:
+  localstack-data:
+  clickhouse-data:
+

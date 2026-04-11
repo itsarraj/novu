@@ -1,0 +1,110 @@
+# Full stack: dependency containers + API, Worker, WS + Dashboard (built from this repo).
+#
+# Requires Docker Compose v2.20+ (for `include`) and BuildKit (build secrets for api/worker/ws).
+#
+# From the novu/ directory:
+#   cp .env.docker.example .env.docker
+#   # set JWT_SECRET, STORE_ENCRYPTION_KEY (32 chars), and VITE_* if not using localhost
+#   pnpm install && pnpm docker:prepare
+#   docker compose -f docker-compose.full.yml --env-file .env.deps up -d --build
+#
+# URLs: API :3000  WS :3002  Dashboard :4201
+
+name: novu
+
+include:
+  - docker-compose.yml
+
+secrets:
+  BULL_MQ_PRO_NPM_TOKEN:
+    file: ./scripts/docker/empty-secret
+
+services:
+  api:
+    build:
+      context: ./.docker/build/api
+      dockerfile: Dockerfile
+      args:
+        PACKAGE_PATH: apps/api
+      secrets:
+        - BULL_MQ_PRO_NPM_TOKEN
+    image: novu-api:local
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      NOVU_ENTERPRISE: "false"
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongo
+      - redis
+      - localstack
+      - clickhouse
+
+  worker:
+    build:
+      context: ./.docker/build/worker
+      dockerfile: Dockerfile
+      args:
+        PACKAGE_PATH: apps/worker
+      secrets:
+        - BULL_MQ_PRO_NPM_TOKEN
+    image: novu-worker:local
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      NOVU_ENTERPRISE: "false"
+      PORT: "3004"
+      # In-container calls to the API (see docker/community/docker-compose.yml)
+      API_ROOT_URL: http://api:3000
+    depends_on:
+      - mongo
+      - redis
+      - localstack
+      - clickhouse
+      - api
+
+  ws:
+    build:
+      context: ./.docker/build/ws
+      dockerfile: Dockerfile
+      args:
+        PACKAGE_PATH: apps/ws
+      secrets:
+        - BULL_MQ_PRO_NPM_TOKEN
+    image: novu-ws:local
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      NOVU_ENTERPRISE: "false"
+      PORT: "3002"
+    ports:
+      - "3002:3002"
+    depends_on:
+      - mongo
+      - redis
+      - api
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: apps/dashboard/dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      VITE_API_HOSTNAME: ${VITE_API_HOSTNAME:-http://localhost:3000}
+      VITE_WEBSOCKET_HOSTNAME: ${VITE_WEBSOCKET_HOSTNAME:-http://localhost:3002}
+      VITE_SELF_HOSTED: "true"
+    ports:
+      - "4201:4000"
+    depends_on:
+      - api
+      - worker

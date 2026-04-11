@@ -52,6 +52,7 @@ export enum CredentialsKeyEnum {
   AppIOBaseUrl = 'AppIOBaseUrl',
   ServicePlanId = 'servicePlanId',
   TenantId = 'tenantId',
+  TemplateId = 'templateId',
 }
 
 export type ConfigurationKey = keyof IConfigurations;
@@ -121,6 +122,7 @@ export enum SmsProviderIdEnum {
   Sinch = 'sinch',
   ISendProSms = 'isendpro-sms',
   CmTelecom = 'cm-telecom',
+  GupshupWhatsapp = 'gupshup-whatsapp',
 }
 
 export enum ChatProviderIdEnum {

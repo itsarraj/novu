@@ -23,6 +23,7 @@ import {
   DeliveryLifecycleStatusEnum,
   ExecutionDetailsSourceEnum,
   ExecutionDetailsStatusEnum,
+  SmsProviderIdEnum,
   WebhookEventEnum,
   WebhookObjectTypeEnum,
 } from '@novu/shared';
@@ -31,6 +32,57 @@ import { PlatformException } from '../../../shared/utils';
 import { SendMessageBase } from './send-message.base';
 import { SendMessageChannelCommand } from './send-message-channel.command';
 import { SendMessageResult, SendMessageStatus } from './send-message-type.usecase';
+
+/**
+ * Gupshup WhatsApp (and similar) read template id/params from SMS `customData`, but triggers often
+ * send them on the event `payload`. Merge payload into customData; step/API overrides win.
+ */
+function smsTemplateCustomDataFromPayload(payload: unknown): Record<string, unknown> {
+  if (!payload || typeof payload !== 'object') {
+    return {};
+  }
+
+  const p = payload as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  const tid = p.templateId ?? p.template_id;
+
+  if (tid != null && String(tid).trim() !== '') {
+    out.templateId = String(tid);
+  }
+
+  const tparams = p.templateParams ?? p.template_params;
+
+  if (Array.isArray(tparams)) {
+    out.templateParams = tparams.map((x) => (x == null ? '' : String(x)));
+  }
+
+  const nested = p.template;
+
+  if (nested && typeof nested === 'object') {
+    const t = nested as Record<string, unknown>;
+
+    if (!out.templateId && t.id != null && String(t.id).trim() !== '') {
+      out.templateId = String(t.id);
+    }
+
+    if (!out.templateParams && Array.isArray(t.params)) {
+      out.templateParams = (t.params as unknown[]).map((x) => (x == null ? '' : String(x)));
+    }
+  }
+
+  // Repo / flow triggers often send Gupshup template uuid as top-level `id` with `params` (see Readme-setup.md).
+  if (
+    !out.templateId &&
+    p.id != null &&
+    String(p.id).trim() !== '' &&
+    Array.isArray(p.params)
+  ) {
+    out.templateId = String(p.id);
+    out.templateParams = (p.params as unknown[]).map((x) => (x == null ? '' : String(x)));
+  }
+
+  return out;
+}
 
 @Injectable()
 export class SendMessageSms extends SendMessageBase {
@@ -310,12 +362,23 @@ export class SendMessageSms extends SendMessageBase {
         throw new PlatformException(`Sms handler for provider ${integration.providerId} is  not found`);
       }
 
+      const fromPayload =
+        integration.providerId === SmsProviderIdEnum.GupshupWhatsapp ? smsTemplateCustomDataFromPayload(command.payload) : {};
+      // Trigger overrides.sms may carry templateId at top level (not only under customData).
+      const fromSmsOverrides =
+        integration.providerId === SmsProviderIdEnum.GupshupWhatsapp ? smsTemplateCustomDataFromPayload(overrides) : {};
+      const customData = {
+        ...fromPayload,
+        ...fromSmsOverrides,
+        ...(overrides.customData && typeof overrides.customData === 'object' ? overrides.customData : {}),
+      };
+
       const result = await smsHandler.send({
         to: overrides.to || phone,
         from: overrides.from || integration.credentials.from,
         content: bridgeBody || overrides.content || content,
         id: message._id,
-        customData: overrides.customData || {},
+        customData,
         bridgeProviderData: this.combineOverrides(
           command.bridgeData,
           command.overrides,
